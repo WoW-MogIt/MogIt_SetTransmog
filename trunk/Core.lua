@@ -29,8 +29,9 @@ local function scanItems(items, apply)
 	for i, invSlot in ipairs(slots) do
 		local item = items[invSlot]
 		if item then
+			item = MogIt:ItemToID(item)
 			local slotID = GetInventorySlotInfo(invSlot)
-			local isTransmogrified, canTransmogrify, _, _, _, visibleItemID = GetTransmogrifySlotInfo(slotID)
+			local isTransmogrified, canTransmogrify, cannotTransmogrifyReason, _, _, visibleItemID = GetTransmogrifySlotInfo(slotID)
 			local found
 			if item == GetInventoryItemID("player", slotID) then
 				-- searched item is the one equipped
@@ -49,9 +50,9 @@ local function scanItems(items, apply)
 					for location, itemID in pairs(itemTable) do
 						if itemID == item then
 							if apply then
-								local player, bank, bags, voidStorage, slot, bag = EquipmentManager_UnpackLocation(location)
+								local player, bank, bags, voidStorage, slot, bag, tab, voidSlot = EquipmentManager_UnpackLocation(location)
 								if voidStorage then
-									UseVoidItemForTransmogrify(slot, slotID)
+									UseVoidItemForTransmogrify(tab, voidSlot, slotID)
 								else
 									UseItemForTransmogrify(bag, slot, slotID)
 								end
@@ -65,7 +66,16 @@ local function scanItems(items, apply)
 			end
 			if not apply and not found then
 				missing = true
-				text = (text or "")..format("%s: %s\n", _G[strupper(invSlot)], MogIt:GetItemLabel(item))
+				local message, color
+				if canTransmogrify then
+					if not MogIt:HasItem(item) then
+						text = (text or "")..format("%s: %s |cffff2020not found.\n", _G[strupper(invSlot)], MogIt:GetItemLabel(item))
+					else
+						text = (text or "")..format("%s: %s |cffff2020cannot be used to transmogrify this item.\n", _G[strupper(invSlot)], MogIt:GetItemLabel(item))
+					end
+				else
+					text = (text or "")..format("%s: |cffff2020%s\n", _G[strupper(invSlot)], _G["TRANSMOGRIFY_INVALID_REASON"..cannotTransmogrifyReason])
+				end
 			end
 		end
 	end
@@ -104,7 +114,7 @@ local menuButton = Libra:CreateButton(TransmogrifyFrame)
 menuButton:SetWidth(64)
 menuButton:SetPoint("TOPRIGHT", -24, -38)
 menuButton:SetFrameLevel(TransmogrifyFrame:GetFrameLevel() + 3)
-menuButton.rightArrow:Show()
+menuButton.arrow:Show()
 menuButton:SetText("Sets")
 menuButton:SetScript("OnClick", function(self)
 	self.menu:Toggle()
@@ -115,8 +125,6 @@ menuButton:SetScript("OnHide", function(self)
 end)
 
 menuButton.menu = Libra:CreateDropdown("Menu")
-menuButton.menu.xOffset = 0
-menuButton.menu.yOffset = 0
 menuButton.menu.relativeTo = menuButton
 menuButton.menu.relativePoint = "TOPRIGHT"
 menuButton.menu.initialize = function(self)
@@ -128,9 +136,9 @@ menuButton.menu.initialize = function(self)
 		info.notCheckable = true
 		local missing, text = scanItems(set.items)
 		if missing then
-			info.tooltipTitle = "Missing items"
-			info.tooltipText = text:trim()
-			info.tooltipOnButton = true
+			info.tooltipTitle = set.name
+			info.tooltipText = text
+			info.tooltipLines = true
 			info.icon = [[Interface\Minimap\ObjectIcons]]
 			info.tCoordLeft = 1/8
 			info.tCoordRight = 2/8

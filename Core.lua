@@ -29,7 +29,6 @@ local function scanItems(items, apply)
 	for i, invSlot in ipairs(slots) do
 		local item = items[invSlot]
 		if item then
-			item = MogIt:ItemToID(item)
 			local slotID = GetInventorySlotInfo(invSlot)
 			local isTransmogrified, canTransmogrify, cannotTransmogrifyReason, _, _, visibleItemID = GetTransmogrifySlotInfo(slotID)
 			local found

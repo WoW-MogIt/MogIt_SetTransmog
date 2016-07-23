@@ -3,37 +3,31 @@ local ItemInfo = LibStub("LibItemInfo-1.0")
 
 local Wishlist = MogIt:GetModule("Wishlist")
 
-local slots = {
-	"HeadSlot",
-	"ShoulderSlot",
-	"BackSlot",
-	"ChestSlot",
-	"WristSlot",
-	"HandsSlot",
-	"WaistSlot",
-	"LegsSlot",
-	"FeetSlot",
-	"MainHandSlot",
-	"SecondaryHandSlot",
+local OUTFIT_FRAME_ADDED_PIXELS = 90
+
+local hideVisualCategories = {
+	["HeadSlot"] = LE_TRANSMOG_COLLECTION_TYPE_HEAD,
+	["ShoulderSlot"] = LE_TRANSMOG_COLLECTION_TYPE_SHOULDER,
+	["BackSlot"] = LE_TRANSMOG_COLLECTION_TYPE_BACK,
 }
+
+local hideVisualSources = {}
 
 local accessorySlots = {
 	"ShirtSlot",
 	"TabardSlot",
 }
 
-local function getLinkFromLocation(location)
-	local player, bank, bags, voidStorage, slot, bag, tab, voidSlot = EquipmentManager_UnpackLocation(location)
-	if voidStorage then
-		return GetVoidItemHyperlinkString((tab - 1) * 80 + voidSlot)
-	elseif not bags then
-		return GetInventoryItemLink("player", slot)
-	else
-		return GetContainerItemLink(bag, slot)
-	end
-end
+local model = CreateFrame("DressUpModel")
+model:SetAutoDress(false)
 
-local itemTable = {}
+local function getSourceFromItem(item, slot)
+	model:SetUnit("player")
+	model:Undress()
+	model:TryOn(item)
+	local sourceID = model:GetSlotTransmogSources(slot)
+	return sourceID
+end
 
 local function scanItems(items)
 	local missing, text
@@ -85,105 +79,126 @@ local function scanItems(items)
 end
 
 local function applyItems(items)
-	for invSlot, item in pairs(items) do
+	for i, invSlot in ipairs(MogIt.slots) do
 		local slotID = GetInventorySlotInfo(invSlot)
-		if MogIt.mogSlots[slotID] then
-			local isTransmogrified, canTransmogrify, cannotTransmogrifyReason, _, _, visibleItemID = GetTransmogrifySlotInfo(slotID)
-			if item == GetInventoryItemID("player", slotID) then
-				-- searched item is the one equipped
-				if isTransmogrified then
+		local item = items[invSlot]
+		local hideVisualCategory = hideVisualCategories[invSlot]
+		if item then
+			local baseSourceID, baseVisualID, appliedSourceID, appliedVisualID, pendingSourceID, pendingVisualID, hasPendingUndo = C_Transmog.GetSlotVisualInfo(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
+			local isTransmogrified, hasPending, isPendingCollected, canTransmogrify, cannotTransmogrifyReason, hasUndo, isHideVisual = C_Transmog.GetSlotInfo(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
+			local sourceID = getSourceFromItem(item, slotID)
+			local categoryID, appearanceID, canEnchant, icon, isCollected = C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
+			-- print(invSlot, sourceID, isTransmogrified, canTransmogrify, baseSourceID)
+			-- if not C_TransmogCollection.PlayerKnowsSource(sourceID) then
+			if not isCollected then
+				C_Transmog.ClearPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
+			elseif sourceID == baseSourceID then
+				-- if isTransmogrified or hasPending then
 					-- if it's transmogged into something else, revert that
-					ClickTransmogrifySlot(slotID)
-				end
+					C_Transmog.ClearPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
+					-- C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, 0)
+				-- end
 			elseif canTransmogrify then
-				if visibleItemID ~= item then
-					wipe(itemTable)
-					GetInventoryItemsForSlot(slotID, itemTable, "transmogrify")
-					for location in pairs(itemTable) do
-						if MogIt:NormaliseItemString(getLinkFromLocation(location)) == item then
-							local player, bank, bags, voidStorage, slot, bag, tab, voidSlot = EquipmentManager_UnpackLocation(location)
-							if voidStorage then
-								UseVoidItemForTransmogrify(tab, voidSlot, slotID)
-							else
-								UseItemForTransmogrify(bag, slot, slotID)
-							end
-							TransmogrifyConfirmationPopup.slot = nil
-							break
-						end
+				-- if appliedSourceID ~= sourceID then
+					C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, sourceID)
+					-- TransmogrifyConfirmationPopup.slot = nil
+				-- end
+			end
+		elseif hideVisualCategory then
+			local hideVisualSource = hideVisualSources[invSlot]
+			if not hideVisualSource then
+				for i, appearance in pairs(C_TransmogCollection.GetCategoryAppearances(hideVisualCategory)) do
+					local sources = C_TransmogCollection.GetAppearanceSources(appearance.visualID)
+					if appearance.isHideVisual then
+						hideVisualSource = sources[1].sourceID
+						hideVisualSources[invSlot] = hideVisualSource
 					end
 				end
 			end
-		end
-	end
-	for i, invSlot in ipairs(accessorySlots) do
-		local slotID = GetInventorySlotInfo(invSlot)
-		if items[invSlot] then
-			TransmogrifyModelFrame:TryOn(items[invSlot])
+			C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, hideVisualSource)
 		else
-			TransmogrifyModelFrame:UndressSlot(slotID)
+			C_Transmog.ClearPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
 		end
 	end
-	if not items["HeadSlot"] then
-		TransmogrifyModelFrame:UndressSlot(INVSLOT_HEAD)
-	end
-	if not items["BackSlot"] then
-		TransmogrifyModelFrame:UndressSlot(INVSLOT_BACK)
-	end
 end
 
-local function onClick(self, items)
-	local soundCVar = GetCVar("Sound_EnableSFX")
-	SetCVar("Sound_EnableSFX", 0)
-	for i, slot in ipairs(slots) do
-		ClearTransmogrifySlot(GetInventorySlotInfo(slot))
-	end
-	applyItems(items)
-	StaticPopupSpecial_Hide(TransmogrifyConfirmationPopup)
-	TransmogrifyFrame_UpdateApplyButton()
-	SetCVar("Sound_EnableSFX", soundCVar)
-end
-
-local menuButton = Libra:CreateButton(TransmogrifyFrame)
-menuButton:SetWidth(64)
-menuButton:SetPoint("TOPRIGHT", -24, -38)
-menuButton:SetFrameLevel(TransmogrifyFrame:GetFrameLevel() + 3)
-menuButton.arrow:Show()
-menuButton:SetText("Sets")
-menuButton:SetScript("OnClick", function(self)
-	self.menu:Toggle()
+local function onClick2(self, items)
 	PlaySound("igMainMenuOptionCheckBoxOn")
-end)
-menuButton:SetScript("OnHide", function(self)
-	self.menu:Close()
-end)
-
-menuButton.menu = Libra:CreateDropdown("Menu")
-menuButton.menu.relativeTo = menuButton
-menuButton.menu.relativePoint = "TOPRIGHT"
-menuButton.menu.initialize = function(self)
-	for i, set in ipairs(Wishlist:GetSets()) do
-		local info = UIDropDownMenu_CreateInfo()
-		info.text = set.name
-		info.func = onClick
-		info.arg1 = set.items
-		info.notCheckable = true
-		local missing, text, isApplied = scanItems(set.items)
-		if missing then
-			info.tooltipTitle = set.name
-			info.tooltipText = text
-			info.tooltipLines = true
-			info.icon = [[Interface\Minimap\ObjectIcons]]
-			info.tCoordLeft = 1/8
-			info.tCoordRight = 2/8
-			info.tCoordTop = 1/8
-			info.tCoordBottom = 2/8
-		elseif isApplied then
-			info.icon = [[Interface\RaidFrame\ReadyCheck-Ready]]
-		end
-		self:AddButton(info)
+	WardrobeOutfitFrame:Hide()
+	if self.outfitID then
+		-- WardrobeOutfitFrame.dropDown:SelectOutfit(self.outfitID, true);
+		UIDropDownMenu_SetText(WardrobeOutfitFrame.dropDown, Wishlist:GetSets()[self.outfitID].name)
+		applyItems(Wishlist:GetSets()[self.outfitID].items)
 	end
+	-- local soundCVar = GetCVar("Sound_EnableSFX")
+	-- SetCVar("Sound_EnableSFX", 0)
+	-- for i, slot in ipairs(slots) do
+		-- ClearTransmogrifySlot(GetInventorySlotInfo(slot))
+	-- end
+	-- applyItems(items)
+	-- StaticPopupSpecial_Hide(TransmogrifyConfirmationPopup)
+	-- TransmogrifyFrame_UpdateApplyButton()
+	-- SetCVar("Sound_EnableSFX", soundCVar)
 end
 
-ItemInfo.RegisterCallback(menuButton.menu, "OnItemInfoReceivedBatch", function()
-	menuButton.menu:Rebuild()
+local onClick = WardrobeOutfitButtonMixin.OnClick
+
+hooksecurefunc(WardrobeOutfitFrame, "Update", function(self)
+	local buttons = self.Buttons
+	local numOutfits = #C_TransmogCollection.GetOutfits()
+	for i = 1, numOutfits + 1 do
+		buttons[i]:SetScript("OnClick", onClick)
+		buttons[i].Icon:Show()
+	end
+	local stringWidth = 0
+	local minStringWidth = self.dropDown.minMenuStringWidth or OUTFIT_FRAME_MIN_STRING_WIDTH
+	local maxStringWidth = self.dropDown.maxMenuStringWidth or OUTFIT_FRAME_MAX_STRING_WIDTH
+	for i, set in ipairs(Wishlist:GetSets()) do
+		local index = numOutfits + 1 + i
+		local button = buttons[index]
+		if not button then
+			button = CreateFrame("BUTTON", nil, self, "WardrobeOutfitButtonTemplate")
+			button:SetPoint("TOPLEFT", buttons[index - 1], "BOTTOMLEFT", 0, 0)
+			button:SetPoint("TOPRIGHT", buttons[index - 1], "BOTTOMRIGHT", 0, 0)
+		end
+		button:Show()
+		button:SetScript("OnClick", onClick2)
+		-- if ( outfits[i].outfitID == self.dropDown.selectedOutfitID ) then
+			-- button.Check:Show()
+			-- button.Selection:Show()
+		-- else
+			button.Selection:Hide()
+			button.Check:Hide()
+		-- end
+		button.Text:SetWidth(0)
+		button:SetText(NORMAL_FONT_COLOR_CODE..set.name..FONT_COLOR_CODE_CLOSE)
+		button.Icon:Hide()
+		button.outfitID = i
+		stringWidth = max(stringWidth, button.Text:GetStringWidth())
+		if button.Text:GetStringWidth() > maxStringWidth then
+			button.Text:SetWidth(maxStringWidth)
+		end
+		-- local missing, text, isApplied = scanItems(set.items)
+		-- if missing then
+			-- info.tooltipTitle = set.name
+			-- info.tooltipText = text
+			-- info.tooltipLines = true
+			-- info.icon = [[Interface\Minimap\ObjectIcons]]
+			-- info.tCoordLeft = 1/8
+			-- info.tCoordRight = 2/8
+			-- info.tCoordTop = 1/8
+			-- info.tCoordBottom = 2/8
+		-- elseif isApplied then
+			-- info.icon = [[Interface\RaidFrame\ReadyCheck-Ready]]
+		-- end
+		-- self:AddButton(info)
+	end
+	stringWidth = max(stringWidth, minStringWidth)
+	stringWidth = min(stringWidth, maxStringWidth)
+	self:SetWidth(max(self:GetWidth(), stringWidth + OUTFIT_FRAME_ADDED_PIXELS))
+	self:SetHeight(30 + (numOutfits + 1 + #Wishlist:GetSets()) * 20)
 end)
+
+-- ItemInfo.RegisterCallback(menuButton.menu, "OnItemInfoReceivedBatch", function()
+	-- menuButton.menu:Rebuild()
+-- end)

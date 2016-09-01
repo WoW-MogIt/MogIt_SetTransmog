@@ -3,8 +3,6 @@ local ItemInfo = LibStub("LibItemInfo-1.0")
 
 local Wishlist = MogIt:GetModule("Wishlist")
 
-local OUTFIT_FRAME_ADDED_PIXELS = 90
-
 local hideVisualCategories = {
 	["HeadSlot"] = LE_TRANSMOG_COLLECTION_TYPE_HEAD,
 	["ShoulderSlot"] = LE_TRANSMOG_COLLECTION_TYPE_SHOULDER,
@@ -14,19 +12,35 @@ local hideVisualCategories = {
 local hideVisualSources = {}
 
 local accessorySlots = {
-	"ShirtSlot",
-	"TabardSlot",
+	["ShirtSlot"] = LE_TRANSMOG_COLLECTION_TYPE_SHIRT,
+	["TabardSlot"] = LE_TRANSMOG_COLLECTION_TYPE_TABARD,
 }
 
 local model = CreateFrame("DressUpModel")
 model:SetAutoDress(false)
 
+local tryOnSlots = {
+	MainHandSlot = "MAINHANDSLOT",
+	SecondaryHandSlot = "SECONDARYHANDSLOT",
+}
+
 local function getSourceFromItem(item, slot)
+	if accessorySlots[slot] then
+		local itemID = GetItemInfoInstant(item)
+		for i, appearance in ipairs(C_TransmogCollection.GetCategoryAppearances(accessorySlots[slot])) do
+			for i, source in ipairs(C_TransmogCollection.GetAppearanceSources(appearance.visualID)) do
+				local categoryID, appearanceID, canEnchant, icon, isCollected, link = C_TransmogCollection.GetAppearanceSourceInfo(source.sourceID)
+				if itemID == GetItemInfoInstant(link) then
+					return source.sourceID
+				end
+			end
+		end
+		return
+	end
 	model:SetUnit("player")
 	model:Undress()
-	model:TryOn(item)
-	local sourceID = model:GetSlotTransmogSources(slot)
-	return sourceID
+	model:TryOn(item, tryOnSlots[slot])
+	return model:GetSlotTransmogSources(GetInventorySlotInfo(slot))
 end
 
 local function scanItems(items)
@@ -86,11 +100,13 @@ local function applyItems(items)
 		if item then
 			local baseSourceID, baseVisualID, appliedSourceID, appliedVisualID, pendingSourceID, pendingVisualID, hasPendingUndo = C_Transmog.GetSlotVisualInfo(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
 			local isTransmogrified, hasPending, isPendingCollected, canTransmogrify, cannotTransmogrifyReason, hasUndo, isHideVisual = C_Transmog.GetSlotInfo(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
-			local sourceID = getSourceFromItem(item, slotID)
-			local categoryID, appearanceID, canEnchant, icon, isCollected = C_TransmogCollection.GetAppearanceSourceInfo(sourceID)
+			local sourceID = getSourceFromItem(item, invSlot)
+			local appearance = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
+			-- C_Transmog.CanTransmogItemWithItem(GetInventoryItemID("player", slotID), item)
 			-- print(invSlot, sourceID, isTransmogrified, canTransmogrify, baseSourceID)
 			-- if not C_TransmogCollection.PlayerKnowsSource(sourceID) then
-			if not isCollected then
+			-- print(invSlot, sourceID, appearance)
+			if not (appearance and appearance.appearanceIsUsable) then
 				C_Transmog.ClearPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
 			elseif sourceID == baseSourceID then
 				-- if isTransmogrified or hasPending then
@@ -100,8 +116,12 @@ local function applyItems(items)
 				-- end
 			elseif canTransmogrify then
 				-- if appliedSourceID ~= sourceID then
+					for i, source in ipairs(C_TransmogCollection.GetAppearanceSources(appearance.appearanceID)) do
+						if source.isCollected then
+							C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, source.sourceID)
+						end
+					end
 					C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, sourceID)
-					-- TransmogrifyConfirmationPopup.slot = nil
 				-- end
 			end
 		elseif hideVisualCategory then
@@ -122,62 +142,67 @@ local function applyItems(items)
 	end
 end
 
-local function onClick2(self, items)
-	PlaySound("igMainMenuOptionCheckBoxOn")
-	WardrobeOutfitFrame:Hide()
-	if self.outfitID then
-		-- WardrobeOutfitFrame.dropDown:SelectOutfit(self.outfitID, true);
-		UIDropDownMenu_SetText(WardrobeOutfitFrame.dropDown, Wishlist:GetSets()[self.outfitID].name)
-		applyItems(Wishlist:GetSets()[self.outfitID].items)
-	end
-	-- local soundCVar = GetCVar("Sound_EnableSFX")
-	-- SetCVar("Sound_EnableSFX", 0)
-	-- for i, slot in ipairs(slots) do
-		-- ClearTransmogrifySlot(GetInventorySlotInfo(slot))
-	-- end
-	-- applyItems(items)
-	-- StaticPopupSpecial_Hide(TransmogrifyConfirmationPopup)
-	-- TransmogrifyFrame_UpdateApplyButton()
-	-- SetCVar("Sound_EnableSFX", soundCVar)
+-- ItemInfo.RegisterCallback(menuButton.menu, "OnItemInfoReceivedBatch", function()
+	-- menuButton.menu:Rebuild()
+-- end)
+
+local selectedSet
+
+local function selectSet(set)
+	applyItems(set.items)
+	UIDropDownMenu_SetText(WardrobeOutfitDropDown, set.name)
 end
 
-local onClick = WardrobeOutfitButtonMixin.OnClick
-
-hooksecurefunc(WardrobeOutfitFrame, "Update", function(self)
-	local buttons = self.Buttons
-	local numOutfits = #C_TransmogCollection.GetOutfits()
-	for i = 1, numOutfits + 1 do
-		buttons[i]:SetScript("OnClick", onClick)
-		buttons[i].Icon:Show()
+local dropdown = Libra:CreateDropdown("Menu")
+dropdown:SetDisplayMode(nil)
+dropdown.relativeTo = WardrobeOutfitDropDownLeft
+dropdown.xOffset = nil
+dropdown.yOffset = nil
+dropdown.initialize = function(self, level)
+	local info = UIDropDownMenu_CreateInfo()
+	info.text = TRANSMOG_OUTFIT_NEW
+	info.colorCode = GREEN_FONT_COLOR_CODE
+	info.icon = [[Interface\PaperDollInfoFrame\Character-Plus]]
+	info.notCheckable = true
+	info.func = function(self, outfitID)
+		if WardrobeTransmogFrame and WardrobeTransmogFrame.OutfitHelpBox:IsShown() then
+			WardrobeTransmogFrame.OutfitHelpBox:Hide()
+			SetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_TRANSMOG_OUTFIT_DROPDOWN, true)
+		end
+		WardrobeOutfitDropDown:CheckOutfitForSave()
+		PlaySound("igMainMenuOptionCheckBoxOn")
 	end
-	local stringWidth = 0
-	local minStringWidth = self.dropDown.minMenuStringWidth or OUTFIT_FRAME_MIN_STRING_WIDTH
-	local maxStringWidth = self.dropDown.maxMenuStringWidth or OUTFIT_FRAME_MAX_STRING_WIDTH
-	for i, set in ipairs(Wishlist:GetSets()) do
-		local index = numOutfits + 1 + i
-		local button = buttons[index]
-		if not button then
-			button = CreateFrame("BUTTON", nil, self, "WardrobeOutfitButtonTemplate")
-			button:SetPoint("TOPLEFT", buttons[index - 1], "BOTTOMLEFT", 0, 0)
-			button:SetPoint("TOPRIGHT", buttons[index - 1], "BOTTOMRIGHT", 0, 0)
+	self:AddButton(info)
+	
+	for i, outfit in ipairs(C_TransmogCollection.GetOutfits()) do
+		local info = UIDropDownMenu_CreateInfo()
+		info.text = outfit.name
+		info.checked = (outfit.outfitID == WardrobeOutfitDropDown.selectedOutfitID)
+		info.func = function(self, outfitID)
+			if IsShiftKeyDown() then
+				WardrobeOutfitEditFrame:ShowForOutfit(outfitID)
+			else
+				WardrobeOutfitDropDown:SelectOutfit(outfitID, true)
+				selectedSet = nil
+			end
+			PlaySound("igMainMenuOptionCheckBoxOn")
 		end
-		button:Show()
-		button:SetScript("OnClick", onClick2)
-		-- if ( outfits[i].outfitID == self.dropDown.selectedOutfitID ) then
-			-- button.Check:Show()
-			-- button.Selection:Show()
-		-- else
-			button.Selection:Hide()
-			button.Check:Hide()
-		-- end
-		button.Text:SetWidth(0)
-		button:SetText(NORMAL_FONT_COLOR_CODE..set.name..FONT_COLOR_CODE_CLOSE)
-		button.Icon:Hide()
-		button.outfitID = i
-		stringWidth = max(stringWidth, button.Text:GetStringWidth())
-		if button.Text:GetStringWidth() > maxStringWidth then
-			button.Text:SetWidth(maxStringWidth)
-		end
+		info.arg1 = outfit.outfitID
+		self:AddButton(info)
+	end
+	
+	local sets = Wishlist:GetSets()
+	if #sets == 0 then return end
+	
+	local info = UIDropDownMenu_CreateInfo()
+	info.text = "MogIt"
+	info.isTitle = true
+	info.notCheckable = true
+	self:AddButton(info)
+	
+	for i, set in ipairs(sets) do
+		local info = UIDropDownMenu_CreateInfo()
+		info.text = set.name
 		-- local missing, text, isApplied = scanItems(set.items)
 		-- if missing then
 			-- info.tooltipTitle = set.name
@@ -191,14 +216,35 @@ hooksecurefunc(WardrobeOutfitFrame, "Update", function(self)
 		-- elseif isApplied then
 			-- info.icon = [[Interface\RaidFrame\ReadyCheck-Ready]]
 		-- end
-		-- self:AddButton(info)
+		info.checked = (set == selectedSet)
+		info.func = function(self, set)
+			selectSet(set)
+			selectedSet = set
+			WardrobeOutfitDropDown.selectedOutfitID = nil
+			SetCVar("lastTransmogOutfitID", "")
+			PlaySound("igMainMenuOptionCheckBoxOn")
+		end
+		info.arg1 = set
+		self:AddButton(info)
 	end
-	stringWidth = max(stringWidth, minStringWidth)
-	stringWidth = min(stringWidth, maxStringWidth)
-	self:SetWidth(max(self:GetWidth(), stringWidth + OUTFIT_FRAME_ADDED_PIXELS))
-	self:SetHeight(30 + (numOutfits + 1 + #Wishlist:GetSets()) * 20)
+end
+
+WardrobeOutfitFrame:SetScript("OnUpdate", nil)
+WardrobeOutfitFrame:SetScript("OnHide", nil)
+
+WardrobeOutfitDropDownButton:SetScript("OnClick", function(self)
+	dropdown:Toggle()
+	PlaySound("igMainMenuOptionCheckBoxOn")
 end)
 
--- ItemInfo.RegisterCallback(menuButton.menu, "OnItemInfoReceivedBatch", function()
-	-- menuButton.menu:Rebuild()
--- end)
+WardrobeOutfitDropDown:HookScript("OnShow", function(self)
+	if selectedSet then
+		selectSet(selectedSet)
+	end
+end)
+
+WardrobeOutfitDropDown:HookScript("OnEvent", function(self, event)
+	if event == "TRANSMOG_OUTFITS_CHANGED" and selectedSet then
+		selectSet(selectedSet)
+	end
+end)

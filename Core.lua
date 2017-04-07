@@ -3,45 +3,14 @@ local ItemInfo = LibStub("LibItemInfo-1.0")
 
 local Wishlist = MogIt:GetModule("Wishlist")
 
-local hideVisualCategories = {
-	["HeadSlot"] = LE_TRANSMOG_COLLECTION_TYPE_HEAD,
-	["ShoulderSlot"] = LE_TRANSMOG_COLLECTION_TYPE_SHOULDER,
-	["BackSlot"] = LE_TRANSMOG_COLLECTION_TYPE_BACK,
+local HIDDEN_SOURCES = {
+	HeadSlot = 77344,
+	ShoulderSlot = 77343,
+	BackSlot = 77345,
+	ShirtSlot = 83202,
+	TabardSlot = 83203,
+	WaistSlot = 84223,
 }
-
-local hideVisualSources = {}
-
-local accessorySlots = {
-	["ShirtSlot"] = LE_TRANSMOG_COLLECTION_TYPE_SHIRT,
-	["TabardSlot"] = LE_TRANSMOG_COLLECTION_TYPE_TABARD,
-}
-
-local model = CreateFrame("DressUpModel")
-model:SetAutoDress(false)
-
-local tryOnSlots = {
-	MainHandSlot = "MAINHANDSLOT",
-	SecondaryHandSlot = "SECONDARYHANDSLOT",
-}
-
-local function getSourceFromItem(item, slot)
-	if accessorySlots[slot] then
-		local itemID = GetItemInfoInstant(item)
-		for i, appearance in ipairs(C_TransmogCollection.GetCategoryAppearances(accessorySlots[slot])) do
-			for i, source in ipairs(C_TransmogCollection.GetAppearanceSources(appearance.visualID)) do
-				local categoryID, appearanceID, canEnchant, icon, isCollected, link = C_TransmogCollection.GetAppearanceSourceInfo(source.sourceID)
-				if itemID == GetItemInfoInstant(link) then
-					return source.sourceID
-				end
-			end
-		end
-		return
-	end
-	model:SetUnit("player")
-	model:Undress()
-	model:TryOn(item, tryOnSlots[slot])
-	return model:GetSlotTransmogSources(GetInventorySlotInfo(slot))
-end
 
 local function scanItems(items)
 	local missing, text
@@ -96,46 +65,54 @@ local function applyItems(items)
 	for i, invSlot in ipairs(MogIt.slots) do
 		local slotID = GetInventorySlotInfo(invSlot)
 		local item = items[invSlot]
-		local hideVisualCategory = hideVisualCategories[invSlot]
 		if item then
 			local baseSourceID, baseVisualID, appliedSourceID, appliedVisualID, pendingSourceID, pendingVisualID, hasPendingUndo = C_Transmog.GetSlotVisualInfo(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
 			local isTransmogrified, hasPending, isPendingCollected, canTransmogrify, cannotTransmogrifyReason, hasUndo, isHideVisual = C_Transmog.GetSlotInfo(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
-			local sourceID = getSourceFromItem(item, invSlot)
-			local appearance = C_TransmogCollection.GetAppearanceInfoBySource(sourceID)
-			-- C_Transmog.CanTransmogItemWithItem(GetInventoryItemID("player", slotID), item)
+			local visualID, sourceID = C_TransmogCollection.GetItemInfo(item)
+			
+			-- C_Transmog.CanTransmogItemWithItem(GetInventoryItemLink("player", slotID), item)
 			-- print(invSlot, sourceID, isTransmogrified, canTransmogrify, baseSourceID)
 			-- if not C_TransmogCollection.PlayerKnowsSource(sourceID) then
-			-- print(invSlot, sourceID, appearance)
-			if not (appearance and appearance.appearanceIsUsable) then
+			
+			--[[ CASE
+				item transmogged into target
+				item transmogged into something else
+				item is target
+				item is target but hidden
+				item is target but pending other
+				target missing and item pending any
+				target slot empty
+				source cannot be used
+				target cannot be used
+			]]
+			
+			C_Transmog.ClearPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
+			if not canTransmogrify and not hasUndo then
 				C_Transmog.ClearPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
 			elseif sourceID == baseSourceID then
 				-- if isTransmogrified or hasPending then
 					-- if it's transmogged into something else, revert that
-					C_Transmog.ClearPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
+					-- C_Transmog.ClearPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
+					C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, sourceID)
 					-- C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, 0)
 				-- end
 			elseif canTransmogrify then
 				-- if appliedSourceID ~= sourceID then
-					for i, source in ipairs(C_TransmogCollection.GetAppearanceSources(appearance.appearanceID)) do
-						if source.isCollected then
-							C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, source.sourceID)
+					local sources = C_TransmogCollection.GetAppearanceSources(visualID)
+					if sources then
+						for i, source in ipairs(sources) do
+							if source.isCollected then
+								C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, source.sourceID)
+							end
 						end
+						C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, sourceID)
+					else
+						C_Transmog.ClearPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
 					end
-					C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, sourceID)
 				-- end
 			end
-		elseif hideVisualCategory then
-			local hideVisualSource = hideVisualSources[invSlot]
-			if not hideVisualSource then
-				for i, appearance in pairs(C_TransmogCollection.GetCategoryAppearances(hideVisualCategory)) do
-					local sources = C_TransmogCollection.GetAppearanceSources(appearance.visualID)
-					if appearance.isHideVisual then
-						hideVisualSource = sources[1].sourceID
-						hideVisualSources[invSlot] = hideVisualSource
-					end
-				end
-			end
-			C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, hideVisualSource)
+		elseif HIDDEN_SOURCES[invSlot] then
+			C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, HIDDEN_SOURCES[invSlot])
 		else
 			C_Transmog.ClearPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
 		end

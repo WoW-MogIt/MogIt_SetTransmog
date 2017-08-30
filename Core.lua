@@ -78,8 +78,8 @@ local function applyItems(items)
 				item transmogged into target
 				item transmogged into something else
 				item is target
-				item is target but hidden
-				item is target but pending other
+				item is target but hidden - restore
+				item is target but pending other - clear pending
 				target missing and item pending any
 				target slot empty
 				source cannot be used
@@ -147,7 +147,7 @@ dropdown.initialize = function(self, level)
 			SetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_TRANSMOG_OUTFIT_DROPDOWN, true)
 		end
 		WardrobeOutfitDropDown:CheckOutfitForSave()
-		PlaySound("igMainMenuOptionCheckBoxOn")
+		PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
 	end
 	self:AddButton(info)
 	
@@ -162,13 +162,13 @@ dropdown.initialize = function(self, level)
 				WardrobeOutfitDropDown:SelectOutfit(outfitID, true)
 				selectedSet = nil
 			end
-			PlaySound("igMainMenuOptionCheckBoxOn")
+			PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
 		end
 		info.arg1 = outfit.outfitID
 		self:AddButton(info)
 	end
 	
-	local sets = Wishlist:GetSets()
+	local sets = Wishlist:GetSets(nil, true)
 	if #sets == 0 then return end
 	
 	local info = UIDropDownMenu_CreateInfo()
@@ -198,8 +198,15 @@ dropdown.initialize = function(self, level)
 			selectSet(set)
 			selectedSet = set
 			WardrobeOutfitDropDown.selectedOutfitID = nil
-			SetCVar("lastTransmogOutfitID", "")
-			PlaySound("igMainMenuOptionCheckBoxOn")
+			if GetCVarBool("transmogCurrentSpecOnly") then
+				local specIndex = GetSpecialization()
+				SetCVar("lastTransmogOutfitIDSpec"..specIndex, value)
+			else
+				for specIndex = 1, GetNumSpecializations() do
+					SetCVar("lastTransmogOutfitIDSpec"..specIndex, value)
+				end
+			end
+			PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
 		end
 		info.arg1 = set
 		self:AddButton(info)
@@ -211,7 +218,7 @@ WardrobeOutfitFrame:SetScript("OnHide", nil)
 
 WardrobeOutfitDropDownButton:SetScript("OnClick", function(self)
 	dropdown:Toggle()
-	PlaySound("igMainMenuOptionCheckBoxOn")
+	PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
 end)
 
 WardrobeOutfitDropDown:HookScript("OnShow", function(self)

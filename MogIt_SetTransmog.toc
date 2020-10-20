@@ -1,8 +1,9 @@
-## Interface: 70300
+## Interface: 90001
 ## Title: MogIt: SetTransmog
 ## Version: @project-version@
 ## Notes: Transmogrify full MogIt wishlist sets in one go.
 ## Author: Lombra
+
 ## RequiredDeps: MogIt
 ## LoadOnDemand: 1
 ## LoadWith: Blizzard_Collections

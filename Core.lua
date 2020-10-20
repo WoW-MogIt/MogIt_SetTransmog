@@ -236,7 +236,7 @@ end
 WardrobeOutfitFrame:SetScript("OnUpdate", nil)
 WardrobeOutfitFrame:SetScript("OnHide", nil)
 
-WardrobeOutfitDropDownButton:SetScript("OnClick", function(self)
+WardrobeOutfitDropDownButton:SetScript("OnMouseDown", function(self)
 	dropdown:Toggle()
 	PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
 end)

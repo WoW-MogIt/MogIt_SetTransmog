@@ -12,6 +12,25 @@ local HIDDEN_SOURCES = {
 	WaistSlot = 84223,
 }
 
+local model = CreateFrame("DressUpModel")
+model:SetAutoDress(false)
+
+local function getSourceFromItem(item)
+	local visualID, sourceID = C_TransmogCollection.GetItemInfo(item)
+	if sourceID then
+		return visualID, sourceID
+	end
+	model:SetUnit("player")
+	model:Undress()
+	model:TryOn(item)
+	for i = 1, 19 do
+		local sourceID, visualID = model:GetSlotTransmogSources(i)
+		if sourceID ~= 0 then
+			return visualID, sourceID
+		end
+	end
+end
+
 local function scanItems(items)
 	local missing, text
 	local isApplied = true
@@ -65,10 +84,11 @@ local function applyItems(items)
 	for i, invSlot in ipairs(MogIt.slots) do
 		local slotID = GetInventorySlotInfo(invSlot)
 		local item = items[invSlot]
+		local transmogLocation = TransmogUtil.GetTransmogLocation(slotID, Enum.TransmogType.Appearance, Enum.TransmogModification.None)
 		if item then
-			local baseSourceID, baseVisualID, appliedSourceID, appliedVisualID, pendingSourceID, pendingVisualID, hasPendingUndo = C_Transmog.GetSlotVisualInfo(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
-			local isTransmogrified, hasPending, isPendingCollected, canTransmogrify, cannotTransmogrifyReason, hasUndo, isHideVisual = C_Transmog.GetSlotInfo(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
-			local visualID, sourceID = C_TransmogCollection.GetItemInfo(item)
+			local baseSourceID, baseVisualID, appliedSourceID, appliedVisualID, pendingSourceID, pendingVisualID, hasPendingUndo = C_Transmog.GetSlotVisualInfo(transmogLocation)
+			local isTransmogrified, hasPending, isPendingCollected, canTransmogrify, cannotTransmogrifyReason, hasUndo, isHideVisual = C_Transmog.GetSlotInfo(transmogLocation)
+			local visualID, sourceID = getSourceFromItem(item)
 			
 			-- C_Transmog.CanTransmogItemWithItem(GetInventoryItemLink("player", slotID), item)
 			-- print(invSlot, sourceID, isTransmogrified, canTransmogrify, baseSourceID)
@@ -86,15 +106,15 @@ local function applyItems(items)
 				target cannot be used
 			]]
 			
-			C_Transmog.ClearPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
+			C_Transmog.ClearPending(transmogLocation)
 			if not canTransmogrify and not hasUndo then
-				C_Transmog.ClearPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
+				C_Transmog.ClearPending(transmogLocation)
 			elseif sourceID == baseSourceID then
 				-- if isTransmogrified or hasPending then
 					-- if it's transmogged into something else, revert that
-					-- C_Transmog.ClearPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
-					C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, sourceID)
-					-- C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, 0)
+					-- C_Transmog.ClearPending(transmogLocation)
+					C_Transmog.SetPending(transmogLocation, sourceID)
+					-- C_Transmog.SetPending(transmogLocation, 0)
 				-- end
 			elseif canTransmogrify then
 				-- if appliedSourceID ~= sourceID then
@@ -102,19 +122,19 @@ local function applyItems(items)
 					if sources then
 						for i, source in ipairs(sources) do
 							if source.isCollected then
-								C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, source.sourceID)
+								C_Transmog.SetPending(transmogLocation, source.sourceID)
 							end
 						end
-						C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, sourceID)
+						C_Transmog.SetPending(transmogLocation, sourceID)
 					else
-						C_Transmog.ClearPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
+						C_Transmog.ClearPending(transmogLocation)
 					end
 				-- end
 			end
 		elseif HIDDEN_SOURCES[invSlot] then
-			C_Transmog.SetPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE, HIDDEN_SOURCES[invSlot])
+			C_Transmog.SetPending(transmogLocation, HIDDEN_SOURCES[invSlot])
 		else
-			C_Transmog.ClearPending(slotID, LE_TRANSMOG_TYPE_APPEARANCE)
+			C_Transmog.ClearPending(transmogLocation)
 		end
 	end
 end

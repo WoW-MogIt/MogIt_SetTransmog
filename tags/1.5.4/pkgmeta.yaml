@@ -1,0 +1,4 @@
+package-as: MogIt_SetTransmog
+
+required-dependencies:
+    - mogit

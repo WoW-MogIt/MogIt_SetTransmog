@@ -84,7 +84,7 @@ local function applyItems(items)
 	for i, invSlot in ipairs(MogIt.slots) do
 		local slotID = GetInventorySlotInfo(invSlot)
 		local item = items[invSlot]
-		local transmogLocation = TransmogUtil.GetTransmogLocation(slotID, Enum.TransmogType.Appearance, Enum.TransmogModification.None)
+		local transmogLocation = TransmogUtil.GetTransmogLocation(slotID, Enum.TransmogType.Appearance, Enum.TransmogModification.Main)
 		if item then
 			local baseSourceID, baseVisualID, appliedSourceID, appliedVisualID, pendingSourceID, pendingVisualID, hasPendingUndo = C_Transmog.GetSlotVisualInfo(transmogLocation)
 			local isTransmogrified, hasPending, isPendingCollected, canTransmogrify, cannotTransmogrifyReason, hasUndo, isHideVisual = C_Transmog.GetSlotInfo(transmogLocation)
@@ -113,7 +113,8 @@ local function applyItems(items)
 				-- if isTransmogrified or hasPending then
 					-- if it's transmogged into something else, revert that
 					-- C_Transmog.ClearPending(transmogLocation)
-					C_Transmog.SetPending(transmogLocation, sourceID)
+					local pendingInfo = TransmogUtil.CreateTransmogPendingInfo(Enum.TransmogPendingType.Apply, sourceID)
+					C_Transmog.SetPending(transmogLocation, pendingInfo)
 					-- C_Transmog.SetPending(transmogLocation, 0)
 				-- end
 			elseif canTransmogrify then
@@ -122,17 +123,20 @@ local function applyItems(items)
 					if sources then
 						for i, source in ipairs(sources) do
 							if source.isCollected then
-								C_Transmog.SetPending(transmogLocation, source.sourceID)
+								local pendingInfo = TransmogUtil.CreateTransmogPendingInfo(Enum.TransmogPendingType.Apply, source.sourceID)
+								C_Transmog.SetPending(transmogLocation, pendingInfo)
 							end
 						end
-						C_Transmog.SetPending(transmogLocation, sourceID)
+						local pendingInfo = TransmogUtil.CreateTransmogPendingInfo(Enum.TransmogPendingType.Apply, sourceID)
+						C_Transmog.SetPending(transmogLocation, pendingInfo)
 					else
 						C_Transmog.ClearPending(transmogLocation)
 					end
 				-- end
 			end
 		elseif HIDDEN_SOURCES[invSlot] then
-			C_Transmog.SetPending(transmogLocation, HIDDEN_SOURCES[invSlot])
+			local pendingInfo = TransmogUtil.CreateTransmogPendingInfo(Enum.TransmogPendingType.ToggleOff, HIDDEN_SOURCES[invSlot])
+			C_Transmog.SetPending(transmogLocation, pendingInfo)
 		else
 			C_Transmog.ClearPending(transmogLocation)
 		end
@@ -162,8 +166,8 @@ dropdown.initialize = function(self, level)
 	info.icon = [[Interface\PaperDollInfoFrame\Character-Plus]]
 	info.notCheckable = true
 	info.func = function(self, outfitID)
-		if WardrobeTransmogFrame and WardrobeTransmogFrame.OutfitHelpBox:IsShown() then
-			WardrobeTransmogFrame.OutfitHelpBox:Hide()
+		if WardrobeTransmogFrame and HelpTip:IsShowing(WardrobeTransmogFrame, TRANSMOG_OUTFIT_DROPDOWN_TUTORIAL) then
+			HelpTip:Hide(WardrobeTransmogFrame, TRANSMOG_OUTFIT_DROPDOWN_TUTORIAL)
 			SetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_TRANSMOG_OUTFIT_DROPDOWN, true)
 		end
 		WardrobeOutfitDropDown:CheckOutfitForSave()

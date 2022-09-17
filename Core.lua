@@ -175,10 +175,11 @@ dropdown.initialize = function(self, level)
 	end
 	self:AddButton(info)
 	
-	for i, outfit in ipairs(C_TransmogCollection.GetOutfits()) do
+	for i, outfitID in ipairs(C_TransmogCollection.GetOutfits()) do
+		local outfitName, outfitIcon = C_TransmogCollection.GetOutfitInfo(outfitID)
 		local info = UIDropDownMenu_CreateInfo()
-		info.text = outfit.name
-		info.checked = (outfit.outfitID == WardrobeOutfitDropDown.selectedOutfitID)
+		info.text = outfitName
+		info.checked = (outfitID == WardrobeOutfitDropDown.selectedOutfitID)
 		info.func = function(self, outfitID)
 			if IsShiftKeyDown() then
 				WardrobeOutfitEditFrame:ShowForOutfit(outfitID)
@@ -188,7 +189,7 @@ dropdown.initialize = function(self, level)
 			end
 			PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
 		end
-		info.arg1 = outfit.outfitID
+		info.arg1 = outfitID
 		self:AddButton(info)
 	end
 	

@@ -159,6 +159,13 @@ dropdown:SetDisplayMode(nil)
 dropdown.relativeTo = WardrobeOutfitDropDownLeft
 dropdown.xOffset = nil
 dropdown.yOffset = nil
+dropdown.GetItemTransmogInfoList = function()
+	local playerActor = DressUpFrame.ModelScene:GetPlayerActor()
+	if playerActor then
+		return playerActor:GetItemTransmogInfoList();
+	end
+	return nil
+end
 dropdown.initialize = function(self, level)
 	local info = UIDropDownMenu_CreateInfo()
 	info.text = TRANSMOG_OUTFIT_NEW
@@ -170,7 +177,7 @@ dropdown.initialize = function(self, level)
 			HelpTip:Hide(WardrobeTransmogFrame, TRANSMOG_OUTFIT_DROPDOWN_TUTORIAL)
 			SetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_TRANSMOG_OUTFIT_DROPDOWN, true)
 		end
-		WardrobeOutfitDropDown:CheckOutfitForSave()
+		WardrobeOutfitFrame:StartOutfitSave(dropdown)
 		PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
 	end
 	self:AddButton(info)

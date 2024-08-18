@@ -1,4 +1,3 @@
-local Libra = LibStub("Libra")
 local ItemInfo = LibStub("LibItemInfo-1.0")
 
 local Wishlist = MogIt:GetModule("Wishlist")
@@ -11,25 +10,6 @@ local HIDDEN_SOURCES = {
 	TabardSlot = 83203,
 	WaistSlot = 84223,
 }
-
-local model = CreateFrame("DressUpModel")
-model:SetAutoDress(false)
-
-local function getSourceFromItem(item)
-	local visualID, sourceID = C_TransmogCollection.GetItemInfo(item)
-	if sourceID then
-		return visualID, sourceID
-	end
-	model:SetUnit("player")
-	model:Undress()
-	model:TryOn(item)
-	for i = 1, 19 do
-		local sourceID, visualID = model:GetSlotTransmogSources(i)
-		if sourceID ~= 0 then
-			return visualID, sourceID
-		end
-	end
-end
 
 local function scanItems(items)
 	local missing, text
@@ -88,12 +68,12 @@ local function applyItems(items)
 		if item then
 			local baseSourceID, baseVisualID, appliedSourceID, appliedVisualID, pendingSourceID, pendingVisualID, hasPendingUndo = C_Transmog.GetSlotVisualInfo(transmogLocation)
 			local isTransmogrified, hasPending, isPendingCollected, canTransmogrify, cannotTransmogrifyReason, hasUndo, isHideVisual = C_Transmog.GetSlotInfo(transmogLocation)
-			local visualID, sourceID = getSourceFromItem(item)
-			
+			local visualID, sourceID = C_TransmogCollection.GetItemInfo(item)
+
 			-- C_Transmog.CanTransmogItemWithItem(GetInventoryItemLink("player", slotID), item)
 			-- print(invSlot, sourceID, isTransmogrified, canTransmogrify, baseSourceID)
 			-- if not C_TransmogCollection.PlayerKnowsSource(sourceID) then
-			
+
 			--[[ CASE
 				item transmogged into target
 				item transmogged into something else
@@ -105,7 +85,7 @@ local function applyItems(items)
 				source cannot be used
 				target cannot be used
 			]]
-			
+
 			C_Transmog.ClearPending(transmogLocation)
 			if not canTransmogrify and not hasUndo then
 				C_Transmog.ClearPending(transmogLocation)
@@ -117,7 +97,7 @@ local function applyItems(items)
 					C_Transmog.SetPending(transmogLocation, pendingInfo)
 					-- C_Transmog.SetPending(transmogLocation, 0)
 				-- end
-			elseif canTransmogrify then
+			elseif canTransmogrify and visualID then
 				-- if appliedSourceID ~= sourceID then
 					local sources = C_TransmogCollection.GetAppearanceSources(visualID)
 					if sources then
@@ -151,60 +131,36 @@ local selectedSet
 
 local function selectSet(set)
 	applyItems(set.items)
-	UIDropDownMenu_SetText(WardrobeOutfitDropDown, set.name)
+	WardrobeTransmogFrame.OutfitDropdown:OverrideText(set.name)
 end
 
-local dropdown = Libra:CreateDropdown("Menu")
-dropdown:SetDisplayMode(nil)
-dropdown.relativeTo = WardrobeOutfitDropDownLeft
-dropdown.xOffset = nil
-dropdown.yOffset = nil
-dropdown.initialize = function(self, level)
-	local info = UIDropDownMenu_CreateInfo()
-	info.text = TRANSMOG_OUTFIT_NEW
-	info.colorCode = GREEN_FONT_COLOR_CODE
-	info.icon = [[Interface\PaperDollInfoFrame\Character-Plus]]
-	info.notCheckable = true
-	info.func = function(self, outfitID)
-		if WardrobeTransmogFrame and HelpTip:IsShowing(WardrobeTransmogFrame, TRANSMOG_OUTFIT_DROPDOWN_TUTORIAL) then
-			HelpTip:Hide(WardrobeTransmogFrame, TRANSMOG_OUTFIT_DROPDOWN_TUTORIAL)
-			SetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_TRANSMOG_OUTFIT_DROPDOWN, true)
+local function isSelected(set)
+	return set == selectedSet
+end
+
+local function setSelected(set)
+	selectSet(set)
+	selectedSet = set
+	WardrobeTransmogFrame.OutfitDropdown:SetSelectedOutfitID(nil)
+	if GetCVarBool("transmogCurrentSpecOnly") then
+		local specIndex = GetSpecialization()
+		SetCVar("lastTransmogOutfitIDSpec"..specIndex, "")
+	else
+		for specIndex = 1, GetNumSpecializations() do
+			SetCVar("lastTransmogOutfitIDSpec"..specIndex, "")
 		end
-		WardrobeOutfitDropDown:CheckOutfitForSave()
-		PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
 	end
-	self:AddButton(info)
-	
-	for i, outfitID in ipairs(C_TransmogCollection.GetOutfits()) do
-		local outfitName, outfitIcon = C_TransmogCollection.GetOutfitInfo(outfitID)
-		local info = UIDropDownMenu_CreateInfo()
-		info.text = outfitName
-		info.checked = (outfitID == WardrobeOutfitDropDown.selectedOutfitID)
-		info.func = function(self, outfitID)
-			if IsShiftKeyDown() then
-				WardrobeOutfitEditFrame:ShowForOutfit(outfitID)
-			else
-				WardrobeOutfitDropDown:SelectOutfit(outfitID, true)
-				selectedSet = nil
-			end
-			PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
-		end
-		info.arg1 = outfitID
-		self:AddButton(info)
-	end
-	
+end
+
+Menu.ModifyMenu("MENU_WARDROBE_OUTFITS", function(ownerRegion, rootDescription, contextData)
+	rootDescription:SetScrollMode(20 * 32)
+
+    rootDescription:QueueDivider()
+    rootDescription:QueueTitle("MogIt")
+
 	local sets = Wishlist:GetSets(nil, true)
-	if #sets == 0 then return end
-	
-	local info = UIDropDownMenu_CreateInfo()
-	info.text = "MogIt"
-	info.isTitle = true
-	info.notCheckable = true
-	self:AddButton(info)
-	
+
 	for i, set in ipairs(sets) do
-		local info = UIDropDownMenu_CreateInfo()
-		info.text = set.name
 		-- local missing, text, isApplied = scanItems(set.items)
 		-- if missing then
 			-- info.tooltipTitle = set.name
@@ -218,42 +174,26 @@ dropdown.initialize = function(self, level)
 		-- elseif isApplied then
 			-- info.icon = [[Interface\RaidFrame\ReadyCheck-Ready]]
 		-- end
-		info.checked = (set == selectedSet)
-		info.func = function(self, set)
-			selectSet(set)
-			selectedSet = set
-			WardrobeOutfitDropDown.selectedOutfitID = nil
-			if GetCVarBool("transmogCurrentSpecOnly") then
-				local specIndex = GetSpecialization()
-				SetCVar("lastTransmogOutfitIDSpec"..specIndex, value)
-			else
-				for specIndex = 1, GetNumSpecializations() do
-					SetCVar("lastTransmogOutfitIDSpec"..specIndex, value)
-				end
-			end
-			PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
-		end
-		info.arg1 = set
-		self:AddButton(info)
+		rootDescription:CreateRadio(set.name, isSelected, setSelected, set)
 	end
-end
-
-WardrobeOutfitFrame:SetScript("OnUpdate", nil)
-WardrobeOutfitFrame:SetScript("OnHide", nil)
-
-WardrobeOutfitDropDownButton:SetScript("OnMouseDown", function(self)
-	dropdown:Toggle()
-	PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
 end)
 
-WardrobeOutfitDropDown:HookScript("OnShow", function(self)
+WardrobeTransmogFrame.OutfitDropdown:HookScript("OnShow", function(self)
 	if selectedSet then
 		selectSet(selectedSet)
 	end
 end)
 
-WardrobeOutfitDropDown:HookScript("OnEvent", function(self, event)
+WardrobeTransmogFrame.OutfitDropdown:HookScript("OnEvent", function(self, event)
 	if event == "TRANSMOG_OUTFITS_CHANGED" and selectedSet then
 		selectSet(selectedSet)
+	end
+end)
+
+hooksecurefunc(WardrobeTransmogFrame.OutfitDropdown, "SelectOutfit", function(self, outfitID)
+	-- deselect MogIt outfit if a valid native outfit was selected
+	if tonumber(outfitID) then
+		selectedSet = nil
+		self.disableSelectionText = false
 	end
 end)

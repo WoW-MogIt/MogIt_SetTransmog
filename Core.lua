@@ -158,6 +158,8 @@ local function setSelected(set)
 end
 
 Menu.ModifyMenu("MENU_WARDROBE_OUTFITS", function(ownerRegion, rootDescription, contextData)
+	if ownerRegion ~= WardrobeTransmogFrame.OutfitDropdown then return end
+
 	rootDescription:SetScrollMode(20 * 32)
 
     rootDescription:QueueDivider()

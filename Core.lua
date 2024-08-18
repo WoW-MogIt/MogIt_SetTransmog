@@ -120,7 +120,7 @@ local function applyItems(items)
 				-- end
 			end
 		elseif HIDDEN_SOURCES[invSlot] then
-			local pendingInfo = TransmogUtil.CreateTransmogPendingInfo(Enum.TransmogPendingType.ToggleOff, HIDDEN_SOURCES[invSlot])
+			local pendingInfo = TransmogUtil.CreateTransmogPendingInfo(Enum.TransmogPendingType.Apply, HIDDEN_SOURCES[invSlot])
 			C_Transmog.SetPending(transmogLocation, pendingInfo)
 		else
 			C_Transmog.ClearPending(transmogLocation)

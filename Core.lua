@@ -204,3 +204,9 @@ hooksecurefunc(WardrobeTransmogFrame.OutfitDropdown, "SelectOutfit", function(se
 		self.disableSelectionText = false
 	end
 end)
+
+WardrobeTransmogFrame.ModelScene.ClearAllPendingButton:HookScript("OnClick", function(self)
+	selectedSet = nil
+	WardrobeTransmogFrame.OutfitDropdown.disableSelectionText = false
+	WardrobeTransmogFrame.OutfitDropdown:SetText()
+end)

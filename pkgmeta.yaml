@@ -1,4 +1,5 @@
-package-as: MogIt_SetTransmog
+ignore:
+  - pkgmeta.yaml
 
 required-dependencies:
-    - mogit
+  - mogit

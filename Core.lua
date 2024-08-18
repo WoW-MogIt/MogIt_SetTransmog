@@ -6,14 +6,14 @@ local HIDDEN_SOURCES = {
 	HeadSlot = 77344,
 	ShoulderSlot = 77343,
 	BackSlot = 77345,
-	ChestSlot = 40282,
+	ChestSlot = 104602,
 	ShirtSlot = 83202,
 	TabardSlot = 83203,
-	WristSlot = 40284,
-	HandsSlot = 37207,
+	WristSlot = 104604,
+	HandsSlot = 94331,
 	WaistSlot = 84223,
-	LegsSlot = 42568,
-	FeetSlot = 40283,
+	LegsSlot = 198608,
+	FeetSlot = 104603,
 }
 
 local function scanItems(items)
